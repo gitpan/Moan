@@ -1,0 +1,309 @@
+NAME
+    Moan - yet another "assert" module
+
+SYNOPSIS
+    In "lib/MyApp/Database.pm":
+
+     package MyApp::Database;
+     use strict;
+     use Moan;
+     sub new {
+       my ($class, $dbh) = @_;
+       assert($dbh->isa('DBI::db'), 'Passed a database.');
+       assert($dbh->ping, 'Database is alive.');
+       bless [$dbh], $class;
+     }
+     sub dbh {
+       $_[0][0];
+     }
+     1;
+
+    In "bin/myapp.pl":
+
+     #!/usr/bin/perl
+     use MyApp::Database;
+     use Moan;
+     assert(defined $ENV{MYAPP_DB}, 'MYAPP_DB set');
+     my $db = MyApp::Database->new(DBI->connect($ENV{MYAPP_DB}));
+     assert($db->isa('MyApp::Database'), 'Class OK');
+     # do something
+
+    At the command-line:
+
+     perl -Moan::more=MyApp::Database bin/myapp.pl
+
+DESCRIPTION
+    Assertions are somewhere between inlined unit tests, checks against
+    malicious input and executable comments. Assertions should be written to
+    have no side-effects, and to always pass under normal circumstances.
+
+    This is not the only Perl assertion module, and probably not the best,
+    but it does what I need. This module requires Perl 5.10.
+
+  Assertion Functions
+    "assert($expression, $message, $tag)"
+        Checks whether $expression evaluates to true. If not, the assertion
+        fails (see "Assertion Consequences").
+
+        The second parameter $message is optional, and provides an error
+        message to associate with the assertion. If omitted or undef, a
+        default non-descriptive message is used.
+
+        The third parameter $tag is a category for the assertion. This
+        allows you to classify assertions and disable them by tag. If
+        ommitted or undef, the default tag is the package name where the
+        assertion occurred. The following two assertions are equivalent:
+
+         package Foo::Bar;
+         assert(1);
+ 
+         package main;
+         assert(1, undef, 'Foo::Bar');
+
+        Tags starting with a single colon are appended to the package name.
+        So the following two assertions are equivalent:
+
+         package Foo::Bar;
+         assert(1, undef, ':quux');
+ 
+         package main;
+         assert(1, undef, 'Foo::Bar:quux');
+
+        This means you have very little excuse for not namespacing your
+        tags. For small packages, just leave the tag undefined and you'll
+        get your assertion tagged with your package. For larger packages,
+        use tags matching the expression "/^:(\w+)$/".
+
+        Tags are in fact arbitrary strings, but you can save yourself
+        headaches if you stick to the conventions above.
+
+    "affirm {CODE_BLOCK} $message, $tag"
+        Checks that the return value of the code is true. Good for more
+        complex tests. (This is also more efficient than "assert" in cases
+        where you've disabled assertion reporting, as "affirm" can avoid
+        running the code block entirely.
+
+    "diag $message, $tag"
+        Strictly speaking, this does not actually make an assertion, but
+        generates a diagnostic message (which is not usually shown).
+
+        The "Assertion Consequences" section explains how to enable
+        diagnostic messages on a per-tag basis.
+
+    "no Moan"
+        Disables moaning within a lexical block.
+
+   Carp::Assert
+    These functions are provided for rough compatibility with Carp::Assert.
+    You should be able to more or less drop in "Moan" as a replacement:
+
+     use Moan ':carpish';
+
+    "should($given, $expected, $message, $tag)"
+        Equivalent to:
+
+         assert($given ~~ $expected, $message, $tag);
+
+        This is *slightly* different from "Carp::Assert::should" which uses
+        "eq" instead of the smart match.
+
+    "shouldnt($given, $expected, $message, $tag)"
+        Equivalent to:
+
+         assert(!($given ~~ $expected), $message, $tag);
+
+    "DEBUG"
+        Right now this just returns 1.
+
+   Test::More
+    These functions are provided for rough compatibility with Test::More.
+    (Though note that "Moan" is not designed for writing module tests. It
+    doesn't use TAP.) They are not exported by default.
+
+     use Moan ':testmore';
+
+    "ok($expression, $message, $tag)"
+        Largely the same as "assert", provided for people addicted to
+        Test::More.
+
+    "is($given, $expected, $message, $tag)"
+        Equivalent to:
+
+         ok($given eq $expected, $message, $tag);
+
+        or
+
+         ok($given == $expected, $message, $tag);
+
+        ... depending on whether $expected looks like a number.
+
+    "isnt($given, $expected, $message, $tag)"
+        Equivalent to:
+
+         ok($given ne $expected, $message, $tag);
+
+        or
+
+         ok($given != $expected, $message, $tag);
+
+        ... depending on whether $expected looks like a number.
+
+    "like($given, $expected, $message, $tag)"
+        Equivalent to:
+
+         ok($given =~ $expected, $message, $tag);
+
+    "unlike($given, $expected, $message, $tag)"
+        Equivalent to:
+
+         ok($given !~ $expected, $message, $tag);
+
+    "isa_ok($package_name, $class, $message, $tag)"
+    "isa_ok($object, $class, $message, $tag)"
+        Roughly equivalent to:
+
+         ok($package_name->isa($class), $message, $tag);
+         ok($object->isa($class), $message, $tag);
+
+        ... but without failing horribly if $object is, say, an unblessed
+        reference.
+
+    "can_ok($package_name, $method, $message, $tag)"
+    "can_ok($object, $method, $message, $tag)"
+        Roughly equivalent to:
+
+         ok($package_name->can($method), $message, $tag);
+         ok($object->can($method), $message, $tag);
+
+        ... but without failing horribly if $object is, say, an unblessed
+        reference.
+
+   Also Useful
+    Here are some other functions that are occasionally useful.
+
+      use Moan qw/:standard :testmore does_ok defined_ok blessed_ok/;
+
+    "does_ok($package_name, $role, $message, $tag)"
+    "does_ok($object, $role, $message, $tag)"
+        Roughly equivalent to:
+
+         ok($package_name->DOES($role), $message, $tag);
+         ok($object->DOES($role), $message, $tag);
+
+        ... but without failing horribly if $object is, say, an unblessed
+        reference.
+
+    "defined_ok($value, $message, $tag)"
+        Pretty much identical to:
+
+         ok(defined $value, $message, $tag);
+
+    "blessed_ok($object, $message, $tag)"
+         ok(Scalar::Util::blessed($object), $message, $tag);
+
+  Export
+     %EXPORT_TAGS = (
+         testmore => [qw/ok is isnt like unlike can_ok isa_ok/],
+         carpish  => [qw/assert affirm should shouldnt DEBUG/],
+         standard => [qw/assert affirm diag/],
+         );
+     @EXPORT = @{ $EXPORT_TAGS{standard} };
+     @EXPORT_OK = (
+         qw/blessed_ok defined_ok does_ok TRUE FALSE/,
+         @{ $EXPORT_TAGS{standard} },
+         @{ $EXPORT_TAGS{testmore} },
+         @{ $EXPORT_TAGS{carpish} },
+         );
+
+    Yeah, you can export the constants TRUE and FALSE, just because they're
+    so often handy to have.
+
+  Assertion Consequences
+    The normal consequence of an assertion is that a warning will be
+    emitted, if the assertion does not hold (i.e. is false). Diagnostic
+    messages ("diag") will not be printed.
+
+    "Moan" can be kicked into a more verbose mode, where diagnostic messages
+    are printed, and assertions that don't hold are accompanied by
+    stacktracers. Just call "Moan->loudly"
+
+     Moan->loudly(qw/MyApp::Database YourApp::Greaterface/);
+
+    Each argument is a tag which you want to make "louder". The "/^:\w+$/"
+    convention for tags that are local to your package will work, but to
+    specify tags in other packages, you need to fully-qualify the names.
+
+    For example, the tag ":connection" in package MyApp::Database could be
+    made louder using:
+
+     Moan->loudly('MyApp::Database:connection');  # sic
+
+    Tags can be preceded with a minus to switch off the loudness feature.
+
+    Regular expressions also work:
+
+     Moan->loudly(qr/^MyApp::Database:(\w+)$/);
+
+    There's currently no way to remove regular expressions from the list
+    though, so use with caution.
+
+    A special tag "ALL" makes all moaning louder. "-ALL" counteracts that.
+
+    But what if you want to decrease "Moan"'s verbosity? As you might have
+    guessed, "Moan->quietly" fulfils this role. It takes the same parameters
+    as "Moan->loudly".
+
+    If a tag has been quietened, then no warnings will be emitted for it
+    whether the assertion holds or not. In fact, in many cases "Moan" can
+    even avoid completely evaluating the assertion.
+
+    Curiously, a tag can be made both loud and quiet, as the two features
+    are quite separate. If a tag is both, then it will act quiet, except
+    that warnings for diagnostic messages will be emitted. This should be
+    considered an "at risk feature" (i.e. an arguable bug).
+
+    There is also a "Moan->fatally" feature. This again takes the same
+    parameters as "Moan->loudly". It makes failed assertions throw an
+    exception (i.e. die).
+
+    When "Moan" needs to throw an exception for an assertion, it checks to
+    see if the tag is loud, and if not, appends all previous diagnostics to
+    the exception.
+
+    At some point, the exceptions thrown will probably be switched from
+    strings to blessed objects in the next release.
+
+    ("Moan::loudly", "Moan::quietly" and "Moan::fatally" also work.)
+
+    The following functions are provided to check the behaviour of a tag:
+
+    "Moan::is_loud($tag)"
+    "Moan::is_quiet($tag)"
+    "Moan::is_fatal($tag)"
+
+  Command-Line Options
+    "perl -Moan::quietly=tag1,tag2,tag3" - quietly
+    "perl -Moan::loudly=tag1,tag2,tag3" - loudly
+    "perl -d:oh=tag1,tag2,tag3" - loudly and fatally
+
+BUGS
+    Please report any bugs to
+    <http://rt.cpan.org/Dist/Display.html?Queue=Moan>.
+
+SEE ALSO
+    "Carp::Assert", "Test::More".
+
+AUTHOR
+    Toby Inkster <tobyink@cpan.org>.
+
+COPYRIGHT AND LICENCE
+    This software is copyright (c) 2011 by Toby Inkster.
+
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
+
+DISCLAIMER OF WARRANTIES
+    THIS PACKAGE IS PROVIDED "AS IS" AND WITHOUT ANY EXPRESS OR IMPLIED
+    WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
+    MERCHANTIBILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
